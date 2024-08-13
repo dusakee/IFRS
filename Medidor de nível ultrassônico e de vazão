@@ -1,0 +1,153 @@
+/*
+TRABALHO DE INSTRUMENTAÇÃO E CONTROLE DE PROCESSOS - 2024/1
+Engenharia de Alimentos - IFRS Erechim
+Professora Dra. Cristiano Reinaldo Lisboa
+Autores: Eduardo Saccomori, Lauren Balestieri, Rafaela Elias, Raissa Devitte
+Circuito elétrico: https://www.tinkercad.com/things/ibCMT8GrQcD-medidor-de-nivel-ultrassonico/editel?sharecode=1NWE4l51Z6U38gdbEI3NO--z0BuwgIGcrmGgtUU8YKk
+*/
+// Declaração das variáveis e suas respectivas portas
+const int buz = 13; //buzzer
+const int echo = A3; //sensor ultrassônico
+const int trigger = A4; //sensor ultrassônico
+int porta_rele = A2; //rele
+const int ledVermelhoALTO = 10; //Led vermelho alto
+const int ledAmareloALTO = 9; //Led amarelo alto
+const int ledVerde = 8; //Led verdex
+const int ledAmareloBAIXO = 7; //Led amarelo baio
+const int ledVermelhoBAIXO = 6; //Led vermelho baixo
+int buttonPin = 2;//Define buttonPin no pino digital 2
+int estadoButton = 0;
+long tempo; //variável tempo
+float distancia; //variavel distância
+int percent = 0; //variavel percentual
+const int INTERRUPCAO_SENSOR = 0; //Interruptor = 0 equivale ao pino digital 2
+const int PINO_SENSOR = 1; //medidor de vazão
+unsigned long contador = 0; //medidor dos pulsos vazão
+const float FATOR_CALIBRACAO = 4.5; //calibração confrome o tamanho
+float fluxo = 0; //variável da vazão
+unsigned long tempo_antes = 0; //tempo não acumulativo
+
+//Inicialização do arduino - Controles básicos e detecção dos módulos
+void setup()
+{
+  pinMode(echo, INPUT);
+  pinMode(trigger, OUTPUT);
+  pinMode(buz, OUTPUT);
+  pinMode(ledVerde, OUTPUT);
+  pinMode(ledAmareloBAIXO, OUTPUT);
+  pinMode(ledVermelhoBAIXO, OUTPUT);
+  pinMode(ledAmareloALTO, OUTPUT);
+  pinMode(ledVermelhoALTO, OUTPUT);
+  pinMode(porta_rele, OUTPUT); 
+  pinMode(PINO_SENSOR, INPUT_PULLUP);
+  pinMode(buttonPin , INPUT);
+  Serial.begin(9600);
+}
+//Programa principal
+void loop()
+{
+  Medicao(); //Executa a função de medir a distância
+  Percentual(); //Transforma a distância em percentual
+  Serial.print ("Distancia: "); //Imprime as informações no monitor
+  Serial.print (distancia);
+  Serial.print("cm - ");
+  Serial.print (percent);
+  Serial.println("% de volume");
+  controleLEDs();
+  delay(1000);
+
+  if (percent >= 86) {
+    Alarme(); //aciona o alarme buzzer
+  }
+    if (percent < 25) {
+    Alarme();
+  }
+
+  if((millis() - tempo_antes) > 1000){ //contagem do tempo para leitura da vazão
+
+    //desabilita a interrupcao para realizar a conversao do valor de pulsos
+    detachInterrupt(INTERRUPCAO_SENSOR);
+
+    //conversao do valor de pulsos para L/min
+    fluxo = ((1000.0 / (millis() - tempo_antes)) * contador) / FATOR_CALIBRACAO;
+
+    //exibicao do valor de fluxo
+    Serial.print("Fluxo de: ");
+    Serial.print(fluxo);
+    Serial.println(" L/min");
+    //reinicializacao do contador de pulsos
+    contador = 0;
+    //atualizacao da variavel tempo_antes
+    tempo_antes = millis();
+    //contagem de pulsos do sensor
+    attachInterrupt(INTERRUPCAO_SENSOR, contador_pulso, FALLING);
+  }
+}
+
+void Alarme() {//alarme pelo buzzer
+  digitalWrite(buz, 1);
+  delay(500);
+  digitalWrite(buz, 0);
+  delay(1000);
+}
+
+void contador_pulso() {
+  contador++; //contagem dos pulsos para vazão
+}
+
+void Percentual() { //converter cm para % - 5cm é 100% e 90cm é 0%
+  percent = map(distancia, 5, 20, 100, 0); 
+}
+
+void Medicao() { //mede a distância dada pelo sensor de ultrassom em pulsos
+  digitalWrite(trigger, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigger, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigger, LOW);
+  tempo = pulseIn(echo, HIGH); //us=microsegundos
+  distancia = float(tempo * 0.0343) / 2;
+  delay(100);
+}
+
+void controleLEDs() { //controla o liga e desliga de cada LED e relé
+  if (percent > 85) {
+    digitalWrite(ledVermelhoALTO, HIGH);
+    digitalWrite(ledAmareloALTO, LOW);
+    digitalWrite(ledVerde, LOW);
+    digitalWrite(ledAmareloBAIXO, LOW);
+    digitalWrite(ledVermelhoBAIXO, LOW);
+    digitalWrite(porta_rele, HIGH);
+  } else if (percent > 60 && percent <= 85) {
+    digitalWrite(ledVermelhoALTO, LOW);
+    digitalWrite(ledAmareloALTO, HIGH);
+    digitalWrite(ledVerde, LOW);
+    digitalWrite(ledAmareloBAIXO, LOW);
+    digitalWrite(ledVermelhoBAIXO, LOW);
+    digitalWrite(porta_rele, HIGH);
+  }  else if (percent > 40 && percent <= 60) {
+    digitalWrite(ledVermelhoALTO, LOW);
+    digitalWrite(ledAmareloALTO, LOW);
+    digitalWrite(ledVerde, HIGH);
+    digitalWrite(ledAmareloBAIXO, LOW);
+    digitalWrite(ledVermelhoBAIXO, LOW);
+    digitalWrite(porta_rele, LOW);
+  } else if (percent > 25 && percent <= 40) {
+    digitalWrite(ledVermelhoALTO, LOW);
+    digitalWrite(ledAmareloALTO, LOW);
+    digitalWrite(ledVerde, LOW);
+    digitalWrite(ledAmareloBAIXO, HIGH);
+    digitalWrite(ledVermelhoBAIXO, LOW);
+    digitalWrite(porta_rele, LOW);
+  } else if (percent < 20) {
+    digitalWrite(ledVermelhoALTO, LOW);
+    digitalWrite(ledAmareloALTO, LOW);
+    digitalWrite(ledVerde, LOW);
+    digitalWrite(ledAmareloBAIXO, LOW);
+    digitalWrite(ledVermelhoBAIXO, HIGH);
+    digitalWrite(porta_rele, LOW);
+  }
+  else {
+  digitalWrite(porta_rele, LOW);
+  }
+}
